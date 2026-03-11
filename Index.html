@@ -58,6 +58,9 @@
 </style>
 </head>
 <body>
+  <audio id="bgMusic" src="requiem-of-the-undead.mp3" loop></audio>
+<audio id="shotSound" src="shot.mp3"></audio>
+
 
 <!-- Title Screen -->
 <div class="screen" id="titleScreen">
@@ -186,7 +189,9 @@ function startGame() {
   startWave(); updateHUD();
   if(gameLoop) cancelAnimationFrame(gameLoop);
   loop();
+  const m=document.getElementById('bgMusic'); m.volume=0.5; m.play();
 }
+
 
 function startWave() {
   waveActive=true; zombiesToSpawn=5+wave*3; spawnTimer=0;
@@ -216,7 +221,9 @@ function gameOver() {
   document.getElementById('finalKills').textContent=kills;
   document.getElementById('finalBest').textContent=bestScore;
   document.getElementById('gameOverScreen').classList.remove('hidden');
+  document.getElementById('bgMusic').pause();
 }
+
 
 function goHome() { window.location.href='https://maximumreality.xyz'; }
 
@@ -236,6 +243,7 @@ function shoot() {
   ammo--; shootCooldown=8; muzzleFlash=6;
   const angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
   bullets.push({x:player.x,y:player.y,vx:Math.cos(angle)*14,vy:Math.sin(angle)*14,life:1,trail:[]});
+  const s=document.getElementById('shotSound'); s.currentTime=0; s.play();
   spawnParticle(player.x,player.y,'#00f5ff',3);
   updateHUD();
 }
