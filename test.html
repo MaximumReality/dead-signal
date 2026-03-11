@@ -407,7 +407,16 @@
 </div>
 
 <script>
- // 1. ASSETS (High-Contrast Neon Fallbacks)
+ // 1. SPRITES WITH FAST-LOAD
+const assets = {
+  player: new Image(),
+  zombie: new Image(),
+  blood: new Image()
+};
+assets.player.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABHklEQVRYR+2V0W3CMBRF780EbMAETMAETMAETMAETMAE7ALsAuwC7ALsAnSCTpA9SSTfE6UpUioSOfYvP8UnreM4pnd7uLp5706vAnAnfAH46M7fC9+M8V7U+YIu4D6Gz8D9hK+D8F/DAnALfAFuW3yZAm6Y7mH+Wfgt/C68v9/XAt9LzGfgfMIPf59w28IX7PcCvNfA78LvUvgXyP6LAV8D50rML+A8ws9S+LcsAPvOEnAtMZeAnX8XfhmEfy8LAK1fEnMN6PeX8Ntg/N9lAcCrtS8xd8An4L6E3+XwAasAoH9fE3ML6PfX8LtE/G9ZAMCH620Se0fMPv/eAr8Lxz8sALAsH0niXon97mH6FvhdyP6pAKD1Kwm6TzDdzrO79y7D8o/8B7h9pM6i9R0mAAAAAElFTkSuQmCC";
+assets.zombie.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABDElEQVRYR+2V0Q3CMAxE38wEbMAETMAETMAETMAETMAE7ALsAuwC7ALsAnSCTsh0SST8pUoqSgUiY/9yj09S7/vevXvD3Uf39vUuAPfCV4C/7vzzwpfReB51P6ELeIrhK/AyhO8R/lVYAG6BT8D9GF/mC9xtmO9l/ln4PfwpfLjfN8D3GPMeOJPwg787uN3CF/o9A+9S+EP4UwrfA9l/Y8DXyLmYeQI+h/CjFP4tC8C+UwNupcyZInD+VfhlEP6zLABofUnMLaDfX8Jvg/F/lwUArzZ9idkBPhfXWvhbDB+wCgD6dzQxd4B+fwm/S8T/lQUAfLixTeLuE7OvP7fA78LxDwsALMshidx7YrfzmH6Wwr9A9u8KAFq/kqD7FNPtNLv3bsPyf/YDe0N6l6q+EAgAAAAASUVORK5CYII=";
+assets.blood.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAbUlEQVRYR+2V0QnAIAxF78wEbMAETMAETMAETMAETMAE7ALsAuwC7ALsAnSCTkhySST8pUoqSgUi4/9yj09S7/vevXvD3Uf39vUuAPfCPwt/T0y3U/iL8K+EBWCvN09Mt79I7D0xfMAqAOjf09v7FPA99QE9gDqKq0oUogAAAABJRU5ErkJggg==";
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 let w = window.innerWidth, h = window.innerHeight;
@@ -421,15 +430,16 @@ resize();
 
 // 2. STATE
 let state = 'title', score = 0, wave = 1, health = 100;
-let player = { x: w/2, y: h/2, angle: 0 }; // Initialize in center immediately
+let player = { x: w/2, y: h/2, angle: 0 };
 let bullets = [], zombies = [], blood = [], mouse = { x: w/2, y: h/2 };
 let ammo = 30, spawnTimer = 0;
 
-// 3. INPUT (iOS Fix)
+// 3. INPUT
 function updateMouse(e) {
   const t = e.touches ? e.touches[0] : e;
-  mouse.x = t.clientX;
-  mouse.y = t.clientY;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = t.clientX - rect.left;
+  mouse.y = t.clientY - rect.top;
 }
 window.addEventListener('touchstart', e => { updateMouse(e); if(state==='playing') shoot(); });
 window.addEventListener('touchmove', e => { e.preventDefault(); updateMouse(e); }, {passive: false});
@@ -438,14 +448,9 @@ window.addEventListener('mousedown', () => { if(state==='playing') shoot(); });
 
 function startGame() {
   resize(); 
-  // FORCE PLAYER TO CENTER
-  player.x = window.innerWidth / 2;
-  player.y = window.innerHeight / 2;
-  
-  state = 'playing';
-  health = 100; score = 0; ammo = 30;
+  player.x = w / 2; player.y = h / 2;
+  state = 'playing'; health = 100; score = 0; ammo = 30;
   zombies = []; bullets = []; blood = [];
-  
   document.getElementById('titleScreen').classList.add('hidden');
   document.getElementById('gameOverScreen').classList.add('hidden');
   updateHUD();
@@ -455,7 +460,7 @@ function startGame() {
 function shoot() {
   if (ammo <= 0) return;
   const a = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-  bullets.push({ x: player.x, y: player.y, vx: Math.cos(a) * 15, vy: Math.sin(a) * 15 });
+  bullets.push({ x: player.x, y: player.y, vx: Math.cos(a) * 14, vy: Math.sin(a) * 14 });
   ammo--; updateHUD();
 }
 
@@ -468,94 +473,83 @@ function updateHUD() {
 
 function loop() {
   if (state !== 'playing') return;
-
-  // Aiming logic
   player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
 
-  // Spawning
   if (--spawnTimer <= 0) {
-    zombies.push({ 
-        x: Math.random() > 0.5 ? -50 : w + 50, 
-        y: Math.random() * h, 
-        hp: 2 
-    });
-    spawnTimer = 50;
+    zombies.push({ x: Math.random() > 0.5 ? -40 : w + 40, y: Math.random() * h, hp: 2 });
+    spawnTimer = Math.max(25, 60 - (wave * 2));
   }
 
-  // Bullet Physics
   bullets.forEach((b, i) => {
     b.x += b.vx; b.y += b.vy;
-    if (b.x < -100 || b.x > w + 100 || b.y < -100 || b.y > h + 100) bullets.splice(i, 1);
+    if (b.x < -50 || b.x > w + 50 || b.y < -50 || b.y > h + 50) bullets.splice(i, 1);
   });
 
-  // Zombie AI
   zombies.forEach((z, i) => {
     const a = Math.atan2(player.y - z.y, player.x - z.x);
-    z.x += Math.cos(a) * 2; z.y += Math.sin(a) * 2;
+    z.x += Math.cos(a) * 1.8; z.y += Math.sin(a) * 1.8;
     z.angle = a;
-
-    // Collision with Bullets
     bullets.forEach((b, j) => {
-      if (Math.hypot(b.x - z.x, b.y - z.y) < 30) {
+      if (Math.hypot(b.x - z.x, b.y - z.y) < 25) {
         z.hp--; bullets.splice(j, 1);
-        if (z.hp <= 0) { 
-            score += 10; blood.push({x: z.x, y: z.y, a: 1}); 
-            zombies.splice(i, 1); updateHUD(); 
-        }
+        if (z.hp <= 0) { score += 10; blood.push({x: z.x, y: z.y, a: 1}); zombies.splice(i, 1); updateHUD(); }
       }
     });
-
-    // Collision with Player
-    if (Math.hypot(player.x - z.x, player.y - z.y) < 30) {
-      health -= 0.5; updateHUD();
-      if (health <= 0) { 
-          state = 'gameover'; 
-          document.getElementById('gameOverScreen').classList.remove('hidden'); 
-      }
+    if (Math.hypot(player.x - z.x, player.y - z.y) < 25) {
+      health -= 0.4; updateHUD();
+      if (health <= 0) { state = 'gameover'; document.getElementById('gameOverScreen').classList.remove('hidden'); }
     }
   });
 
-  blood.forEach((s, i) => { s.a -= 0.02; if (s.a <= 0) blood.splice(i, 1); });
-
+  blood.forEach((s, i) => { s.a -= 0.01; if (s.a <= 0) blood.splice(i, 1); });
   render();
   requestAnimationFrame(loop);
 }
 
 function render() {
-  ctx.fillStyle = '#050a05'; 
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#050a05'; ctx.fillRect(0, 0, w, h);
 
-  // Draw Blood
-  ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+  // Blood
   blood.forEach(s => {
     ctx.globalAlpha = s.a;
-    ctx.beginPath(); ctx.arc(s.x, s.y, 15, 0, Math.PI*2); ctx.fill();
+    if (assets.blood.complete && assets.blood.naturalWidth !== 0) {
+        ctx.drawImage(assets.blood, s.x - 20, s.y - 20, 40, 40);
+    } else {
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+        ctx.beginPath(); ctx.arc(s.x, s.y, 15, 0, Math.PI*2); ctx.fill();
+    }
   });
   ctx.globalAlpha = 1;
 
-  // Draw Bullets
+  // Bullets
   ctx.fillStyle = '#fff';
-  bullets.forEach(b => ctx.fillRect(b.x-2, b.y-2, 5, 5));
+  bullets.forEach(b => ctx.fillRect(b.x-2, b.y-2, 4, 4));
 
-  // Draw Zombies (Neon Green Triangles)
+  // Zombies
   zombies.forEach(z => {
     ctx.save(); ctx.translate(z.x, z.y); ctx.rotate(z.angle);
-    ctx.fillStyle = '#39ff14';
-    ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-15, -12); ctx.lineTo(-15, 12); ctx.closePath(); ctx.fill();
+    if (assets.zombie.complete && assets.zombie.naturalWidth !== 0) {
+        ctx.drawImage(assets.zombie, -18, -18, 36, 36);
+    } else {
+        ctx.fillStyle = '#39ff14';
+        ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-15, -10); ctx.lineTo(-15, 10); ctx.fill();
+    }
     ctx.restore();
   });
 
-  // Draw Player (Neon Blue Diamond)
+  // Player
   ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle);
-  ctx.strokeStyle = '#00f5ff'; ctx.lineWidth = 4;
-  ctx.strokeRect(-15, -15, 30, 30);
-  // Pointer for direction
-  ctx.fillStyle = '#00f5ff'; ctx.fillRect(10, -2, 10, 4);
+  if (assets.player.complete && assets.player.naturalWidth !== 0) {
+      ctx.drawImage(assets.player, -20, -20, 40, 40);
+  } else {
+      ctx.strokeStyle = '#00f5ff'; ctx.lineWidth = 3;
+      ctx.strokeRect(-15, -15, 30, 30);
+  }
   ctx.restore();
 
-  // Draw Sights
+  // Sights
   ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2;
-  ctx.strokeRect(mouse.x - 15, mouse.y - 15, 30, 30);
+  ctx.strokeRect(mouse.x - 12, mouse.y - 12, 24, 24);
 }
 
 </script>
