@@ -407,7 +407,7 @@
 </div>
 
 <script>
-  // SPRITE ASSET MANIFEST
+  // 1. ASSET MANIFEST & PRELOADER
 const SPRITES = {
   player: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABHklEQVRYR+2V0W3CMBRF780EbMAETMAETMAETMAETMAE7ALsAuwC7ALsAnSCTpA9SSTfE6UpUioSOfYvP8UnreM4pnd7uLp5706vAnAnfAH46M7fC9+M8V7U+YIu4D6Gz8D9hK+D8F/DAnALfAFuW3yZAm6Y7mH+Wfgt/C68v9/XAt9LzGfgfMIPf59w28IX7PcCvNfA78LvUvgXyP6LAV8D50rML+A8ws9S+LcsAPvOEnAtMZeAnX8XfhmEfy8LAK1fEnMN6PeX8Ntg/N9lAcCrtS8xd8An4L6E3+XwAasAoH9fE3ML6PfX8LtE/G9ZAMCH620Se0fMPv/eAr8Lxz8sALAsH0niXon97mH6FvhdyP6pAKD1Kwm6TzDdzrO79y7D8o/8B7h9pM6i9R0mAAAAAElFTkSuQmCC",
   zombie: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABDElEQVRYR+2V0Q3CMAxE38wEbMAETMAETMAETMAETMAE7ALsAuwC7ALsAnSCTsh0SST8pUoqSgUiY/9yj09S7/vevXvD3Uf39vUuAPfCV4C/7vzzwpfReB51P6ELeIrhK/AyhO8R/lVYAG6BT8D9GF/mC9xtmO9l/ln4PfwpfLjfN8D3GPMeOJPwg787uN3CF/o9A+9S+EP4UwrfA9l/Y8DXyLmYeQI+h/CjFP4tC8C+UwNupcyZInD+VfhlEP6zLABofUnMLaDfX8Jvg/F/lwUArzZ9idkBPhfXWvhbDB+wCgD6dzQxd4B+fwm/S8T/lQUAfLixTeLuE7OvP7fA78LxDwsALMshidx7YrfzmH6Wwr9A9u8KAFq/kqD7FNPtNLv3bsPyf/YDe0N6l6q+EAgAAAAASUVORK5CYII=",
@@ -415,14 +415,22 @@ const SPRITES = {
 };
 
 const assets = {};
+let assetsLoaded = 0;
+const totalAssets = Object.keys(SPRITES).length;
+
 Object.entries(SPRITES).forEach(([name, src]) => {
-  assets[name] = new Image();
-  assets[name].src = src;
+  const img = new Image();
+  img.src = src;
+  img.onload = () => {
+    assetsLoaded++;
+    assets[name] = img;
+    if (assetsLoaded === totalAssets) console.log("SYSTEM: All assets online.");
+  };
 });
 
+// 2. CORE SETUP
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-
+const ctx = canvas.getContext('2d', { alpha: false }); // Performance boost
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -430,169 +438,134 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-let state = 'title', score = 0, bestScore = 0, wave = 1, kills = 0;
-let player, bullets = [], zombies = [], particles = [], bloodSplats = [];
+let state = 'title', score = 0, bestScore = 0, wave = 1;
+let player, bullets = [], zombies = [], bloodSplats = [];
 let keys = {}, mouse = { x: 0, y: 0 };
 let ammo = 30, maxAmmo = 30, reloading = false, reloadTimer = 0;
-let health = 100, waveTimer = 0, waveActive = false, zombiesToSpawn = 0, spawnTimer = 0;
-let gameLoop, shootCooldown = 0, muzzleFlash = 0;
+let health = 100, waveActive = false, zombiesToSpawn = 0, spawnTimer = 0;
+let muzzleFlash = 0;
 
 function createPlayer() {
-  return { x: canvas.width / 2, y: canvas.height / 2, size: 24, speed: 3.5, angle: 0, invincible: 0 };
+  return { x: canvas.width / 2, y: canvas.height / 2, size: 24, speed: 4, angle: 0, invincible: 0 };
 }
 
-function startGame() {
-  document.getElementById('titleScreen').classList.add('hidden');
-  document.getElementById('gameOverScreen').classList.add('hidden');
-  state = 'playing'; score = 0; wave = 1; kills = 0; health = 100; ammo = maxAmmo; reloading = false;
-  player = createPlayer(); bullets = []; zombies = []; particles = []; bloodSplats = [];
-  startWave(); updateHUD();
-  if (gameLoop) cancelAnimationFrame(gameLoop);
-  loop();
+// 3. INPUT HANDLING (Mobile & Desktop)
+function updateMouse(e) {
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  mouse.x = clientX - rect.left;
+  mouse.y = clientY - rect.top;
 }
 
-function startWave() { waveActive = true; zombiesToSpawn = 5 + wave * 3; spawnTimer = 0; showWaveAlert(`WAVE ${wave}`); }
-
-function showWaveAlert(text) {
-  const el = document.getElementById('waveAlert');
-  el.textContent = text; el.style.opacity = '1';
-  setTimeout(() => { el.style.opacity = '0'; }, 1500);
-}
-
-function updateHUD() {
-  document.getElementById('scoreDisplay').textContent = score;
-  document.getElementById('waveDisplay').textContent = wave;
-  document.getElementById('bestDisplay').textContent = bestScore;
-  document.getElementById('ammoVal').textContent = reloading ? '...' : ammo;
-  document.getElementById('healthFill').style.width = health + '%';
-}
-
-function gameOver() {
-  state = 'gameover'; if (score > bestScore) bestScore = score;
-  document.getElementById('finalScore').textContent = score;
-  document.getElementById('finalWave').textContent = wave;
-  document.getElementById('finalKills').textContent = kills;
-  document.getElementById('finalBest').textContent = bestScore;
-  document.getElementById('gameOverScreen').classList.remove('hidden');
-}
-
-function goHome() { window.location.href = 'https://maximumreality.xyz'; }
-
-// Improved Mouse/Touch Listeners
-window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-window.addEventListener('mousedown', e => { if (state === 'playing') shoot(); });
+window.addEventListener('mousemove', updateMouse);
+window.addEventListener('touchmove', (e) => { e.preventDefault(); updateMouse(e); }, { passive: false });
+window.addEventListener('touchstart', (e) => { updateMouse(e); if (state === 'playing') shoot(); }, { passive: false });
+window.addEventListener('mousedown', () => { if (state === 'playing') shoot(); });
 window.addEventListener('keydown', e => { 
   keys[e.key.toLowerCase()] = true; 
   if (e.key.toLowerCase() === 'r' && state === 'playing') startReload(); 
 });
 window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
+// 4. GAME LOGIC
+function startGame() {
+  if (assetsLoaded < totalAssets) return; // Prevent start before assets load
+  document.getElementById('titleScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  state = 'playing'; score = 0; wave = 1; health = 100; ammo = maxAmmo;
+  player = createPlayer(); bullets = []; zombies = []; bloodSplats = [];
+  startWave(); updateHUD();
+  requestAnimationFrame(loop);
+}
+
+function startWave() { waveActive = true; zombiesToSpawn = 5 + (wave * 2); spawnTimer = 0; }
+function updateHUD() {
+  document.getElementById('scoreDisplay').textContent = score;
+  document.getElementById('waveDisplay').textContent = wave;
+  document.getElementById('ammoVal').textContent = reloading ? '...' : ammo;
+  document.getElementById('healthFill').style.width = health + '%';
+}
+
 function shoot() {
-  if (reloading || shootCooldown > 0 || ammo <= 0) return;
-  ammo--; shootCooldown = 8; muzzleFlash = 5;
+  if (reloading || ammo <= 0) return;
+  ammo--; muzzleFlash = 5;
   const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-  bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle) * 14, vy: Math.sin(angle) * 14, life: 1, trail: [] });
+  bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle) * 15, vy: Math.sin(angle) * 15 });
   updateHUD();
 }
 
-function startReload() { if (reloading || ammo === maxAmmo) return; reloading = true; reloadTimer = 120; document.getElementById('reloadFlash').style.opacity = '1'; }
-function finishReload() { reloading = false; ammo = maxAmmo; document.getElementById('reloadFlash').style.opacity = '0'; updateHUD(); }
+function startReload() { if (reloading || ammo === maxAmmo) return; reloading = true; reloadTimer = 90; }
 
-function drawSprite(name, x, y, size, angle = 0, alpha = 1) {
-  if (!assets[name] || !assets[name].complete) return;
-  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.rotate(angle);
-  ctx.drawImage(assets[name], -size, -size, size * 2, size * 2); ctx.restore();
+function loop() {
+  if (state !== 'playing') return;
+  update();
+  render();
+  requestAnimationFrame(loop);
 }
 
-function loop() { if (state !== 'playing') return; update(); render(); gameLoop = requestAnimationFrame(loop); }
-
 function update() {
+  // Movement
   let dx = 0, dy = 0;
-  if (keys['w'] || keys['arrowup']) dy -= 1; if (keys['s'] || keys['arrowdown']) dy += 1;
-  if (keys['a'] || keys['arrowleft']) dx -= 1; if (keys['d'] || keys['arrowright']) dx += 1;
-  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
-  player.x = Math.max(20, Math.min(canvas.width - 20, player.x + dx * player.speed));
-  player.y = Math.max(20, Math.min(canvas.height - 20, player.y + dy * player.speed));
+  if (keys['w']) dy -= 1; if (keys['s']) dy += 1;
+  if (keys['a']) dx -= 1; if (keys['d']) dx += 1;
+  player.x += dx * player.speed; player.y += dy * player.speed;
   player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
   
-  if (player.invincible > 0) player.invincible--;
-  if (shootCooldown > 0) shootCooldown--; if (muzzleFlash > 0) muzzleFlash--;
-  if (reloading) { reloadTimer--; if (reloadTimer <= 0) finishReload(); }
+  if (reloading && --reloadTimer <= 0) { reloading = false; ammo = maxAmmo; updateHUD(); }
+  if (muzzleFlash > 0) muzzleFlash--;
 
-  if (waveActive && zombiesToSpawn > 0) {
-    spawnTimer--; 
-    if (spawnTimer <= 0) { 
-      zombies.push({ 
-        x: Math.random() > 0.5 ? -20 : canvas.width + 20, 
-        y: Math.random() * canvas.height, 
-        size: 22, speed: 1.2 + (wave * 0.1), hp: 2 + Math.floor(wave/3), maxHp: 2 + Math.floor(wave/3), angle: 0, wobble: Math.random() * 6 
-      }); 
-      zombiesToSpawn--; spawnTimer = 40; 
-    }
+  // Zombies
+  if (waveActive && zombiesToSpawn > 0 && --spawnTimer <= 0) {
+    zombies.push({ x: Math.random() > 0.5 ? -30 : canvas.width + 30, y: Math.random() * canvas.height, hp: 2, angle: 0 });
+    zombiesToSpawn--; spawnTimer = 50;
   }
 
-  bullets.forEach((b, i) => {
+  bullets.forEach((b, bi) => {
     b.x += b.vx; b.y += b.vy;
-    if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
-  });
-
-  zombies.forEach((z, i) => {
-    z.wobble += 0.1; const angle = Math.atan2(player.y - z.y, player.x - z.x);
-    z.angle = angle; z.x += Math.cos(angle) * z.speed; z.y += Math.sin(angle) * z.speed;
-
-    bullets.forEach((b, j) => {
-      if (Math.hypot(b.x - z.x, b.y - z.y) < z.size + 10) {
-        z.hp--; bullets.splice(j, 1);
-        if (z.hp <= 0) { score += 10; bloodSplats.push({x: z.x, y: z.y, alpha: 0.6}); zombies.splice(i, 1); updateHUD(); }
+    zombies.forEach((z, zi) => {
+      if (Math.hypot(b.x - z.x, b.y - z.y) < 25) {
+        z.hp--; bullets.splice(bi, 1);
+        if (z.hp <= 0) { score += 10; bloodSplats.push({x: z.x, y: z.y, a: 0.6}); zombies.splice(zi, 1); updateHUD(); }
       }
     });
-
-    if (player.invincible === 0 && Math.hypot(player.x - z.x, player.y - z.y) < 30) {
-      health -= 10; player.invincible = 60; updateHUD();
-      if (health <= 0) gameOver();
-    }
   });
 
-  bloodSplats.forEach((s, i) => { s.alpha -= 0.003; if (s.alpha <= 0) bloodSplats.splice(i, 1); });
+  zombies.forEach(z => {
+    const a = Math.atan2(player.y - z.y, player.x - z.x);
+    z.angle = a; z.x += Math.cos(a) * 1.5; z.y += Math.sin(a) * 1.5;
+    if (Math.hypot(player.x - z.x, player.y - z.y) < 20) { health -= 0.5; updateHUD(); if (health <= 0) state = 'gameover'; }
+  });
+
+  bloodSplats.forEach((s, i) => { s.a -= 0.002; if (s.a <= 0) bloodSplats.splice(i, 1); });
   if (waveActive && zombiesToSpawn === 0 && zombies.length === 0) { waveActive = false; wave++; setTimeout(startWave, 2000); }
 }
 
 function render() {
   ctx.fillStyle = '#050a05'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-  // Grid
-  ctx.strokeStyle = 'rgba(57,255,20,0.05)';
-  for (let x = 0; x < canvas.width; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-  for (let y = 0; y < canvas.height; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
-
-  bloodSplats.forEach(s => drawSprite('blood', s.x, s.y, 20, 0, s.alpha));
-
-  bullets.forEach(b => {
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI * 2); ctx.fill();
+  bloodSplats.forEach(s => {
+    if (assets.blood) ctx.drawImage(assets.blood, s.x-16, s.y-16, 32, 32);
   });
 
   zombies.forEach(z => {
-    if (z.maxHp > 1) {
-      ctx.fillStyle = '#300'; ctx.fillRect(z.x - 20, z.y - 30, 40, 4);
-      ctx.fillStyle = '#f11'; ctx.fillRect(z.x - 20, z.y - 30, 40 * (z.hp / z.maxHp), 4);
-    }
-    drawSprite('zombie', z.x, z.y + Math.sin(z.wobble) * 2, z.size, z.angle);
+    ctx.save(); ctx.translate(z.x, z.y); ctx.rotate(z.angle);
+    if (assets.zombie) ctx.drawImage(assets.zombie, -16, -16, 32, 32);
+    ctx.restore();
   });
 
   if (player) {
-    if (muzzleFlash > 0) {
-      ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(player.x + Math.cos(player.angle) * 30, player.y + Math.sin(player.angle) * 30, 6, 0, Math.PI * 2); ctx.fill();
-    }
-    drawSprite('player', player.x, player.y, player.size, player.angle, (player.invincible % 4 > 2) ? 0.3 : 1);
+    ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle);
+    if (assets.player) ctx.drawImage(assets.player, -16, -16, 32, 32);
+    ctx.restore();
   }
 
-  // Crosshair
-  ctx.strokeStyle = '#39ff14'; ctx.beginPath();
-  ctx.arc(mouse.x, mouse.y, 6, 0, Math.PI * 2);
-  ctx.moveTo(mouse.x - 10, mouse.y); ctx.lineTo(mouse.x + 10, mouse.y);
-  ctx.moveTo(mouse.x, mouse.y - 10); ctx.lineTo(mouse.x, mouse.y + 10);
-  ctx.stroke();
+  // Sights
+  ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 8, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(mouse.x-12, mouse.y); ctx.lineTo(mouse.x+12, mouse.y); ctx.moveTo(mouse.x, mouse.y-12); ctx.lineTo(mouse.x, mouse.y+12); ctx.stroke();
 }
+
 
 </script>
 </body>
