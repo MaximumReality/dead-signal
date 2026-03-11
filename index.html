@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEAD SIGNAL — Maximum Reality</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bungee&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --blood: #ff1a1a;
+    --neon-green: #39ff14;
+    --cyan: #00f5ff;
+    --dark: #050a05;
+    --darker: #020402;
+    --panel: rgba(0,255,20,0.06);
+    --glow: 0 0 10px #39ff14, 0 0 30px #39ff1466;
+    --red-glow: 0 0 10px #ff1a1a, 0 0 30px #ff1a1a66;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--darker);
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--neon-green);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    cursor: crosshair;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.15) 2px,
+      rgba(0,0,0,0.15) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* Vignette */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 998;
+  }
+
+  #gameContainer {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  #gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* HUD */
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px 20px;
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  .hud-panel {
+    background: rgba(0,10,0,0.8);
+    border: 1px solid var(--neon-green);
+    padding: 8px 16px;
+    box-shadow: var(--glow);
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  }
+
+  .hud-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    opacity: 0.6;
+    text-transform: uppercase;
+  }
+
+  .hud-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--neon-green);
+    text-shadow: var(--glow);
+  }
+
+  #healthBar {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    pointer-events: none;
+    text-align: center;
+  }
+
+  .health-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    opacity: 0.7;
+    margin-bottom: 4px;
+  }
+
+  .health-track {
+    width: 300px;
+    height: 12px;
+    background: rgba(255,26,26,0.15);
+    border: 1px solid #ff1a1a88;
+    position: relative;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  }
+
+  #healthFill {
+    height: 100%;
+    background: linear-gradient(90deg, #ff1a1a, #ff6666);
+    box-shadow: var(--red-glow);
+    transition: width 0.2s;
+  }
+
+  #ammoDisplay {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+    pointer-events: none;
+    text-align: right;
+  }
+
+  .ammo-label { font-size: 9px; letter-spacing: 3px; opacity: 0.6; }
+  .ammo-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--cyan);
+    text-shadow: 0 0 10px var(--cyan), 0 0 30px #00f5ff66;
+  }
+
+  #waveAlert {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Bungee', sans-serif;
+    font-size: clamp(32px, 6vw, 72px);
+    color: var(--blood);
+    text-shadow: var(--red-glow);
+    z-index: 200;
+    pointer-events: none;
+    opacity: 0;
+    letter-spacing: 4px;
+    text-align: center;
+  }
+
+  /* Title / overlay screens */
+  .screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+    background: rgba(2,4,2,0.92);
+  }
+
+  .screen.hidden { display: none; }
+
+  .game-title {
+    font-family: 'Bungee', sans-serif;
+    font-size: clamp(40px, 8vw, 100px);
+    color: var(--blood);
+    text-shadow: 0 0 20px #ff1a1a, 0 0 60px #ff1a1a88;
+    letter-spacing: 6px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .game-subtitle {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(10px, 2vw, 14px);
+    color: var(--neon-green);
+    letter-spacing: 8px;
+    opacity: 0.8;
+    margin-bottom: 50px;
+  }
+
+  .title-art {
+    font-size: clamp(60px, 10vw, 120px);
+    margin-bottom: 20px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 20px #ff1a1a); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 40px #ff1a1a); }
+  }
+
+  .btn {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    padding: 14px 40px;
+    background: transparent;
+    border: 2px solid var(--neon-green);
+    color: var(--neon-green);
+    cursor: pointer;
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+    box-shadow: var(--glow);
+    transition: all 0.2s;
+    text-transform: uppercase;
+    margin: 8px;
+  }
+
+  .btn:hover {
+    background: var(--neon-green);
+    color: var(--darker);
+    box-shadow: var(--glow), inset 0 0 20px rgba(57,255,20,0.3);
+  }
+
+  .btn.danger {
+    border-color: var(--blood);
+    color: var(--blood);
+    box-shadow: var(--red-glow);
+  }
+  .btn.danger:hover {
+    background: var(--blood);
+    color: white;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 30px 0;
+    text-align: center;
+  }
+
+  .stat-box {
+    background: var(--panel);
+    border: 1px solid rgba(57,255,20,0.3);
+    padding: 16px 30px;
+  }
+
+  .stat-num {
+    font-family: 'Orbitron', monospace;
+    font-size: 36px;
+    font-weight: 900;
+    color: var(--neon-green);
+    text-shadow: var(--glow);
+  }
+
+  .stat-label { font-size: 10px; letter-spacing: 3px; opacity: 0.6; margin-top: 4px; }
+
+  .controls-hint {
+    position: fixed;
+    bottom: 60px;
+    left: 20px;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.4;
+    font-size: 10px;
+    line-height: 1.8;
+    letter-spacing: 1px;
+  }
+
+  #reloadFlash {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    letter-spacing: 4px;
+    color: var(--cyan);
+    text-shadow: 0 0 20px var(--cyan);
+    z-index: 200;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .mr-badge {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    letter-spacing: 4px;
+    opacity: 0.3;
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  @keyframes glitch {
+    0% { transform: translate(-50%,-50%) skewX(0deg); }
+    20% { transform: translate(-48%,-50%) skewX(-2deg); }
+    40% { transform: translate(-52%,-50%) skewX(2deg); }
+    60% { transform: translate(-50%,-50%) skewX(0deg); }
+  }
+
+  .glitch { animation: glitch 0.3s steps(2) 1; }
+</style>
+</head>
+<body>
+
+<!-- Title Screen -->
+<div class="screen" id="titleScreen">
+  <div class="title-art">🧟</div>
+  <div class="game-title">DEAD SIGNAL</div>
+  <div class="game-subtitle">// maximum reality // zombie protocol //</div>
+  <button class="btn danger" onclick="startGame()">▶ INITIATE PROTOCOL</button>
+  <div style="margin-top:30px; font-size:11px; letter-spacing:2px; opacity:0.4; text-align:center; line-height:2">
+    WASD / ARROWS — MOVE &nbsp;|&nbsp; MOUSE — AIM &nbsp;|&nbsp; CLICK — SHOOT<br>
+    R — RELOAD &nbsp;|&nbsp; SURVIVE THE WAVES
+  </div>
+</div>
+
+<!-- Game Over Screen -->
+<div class="screen hidden" id="gameOverScreen">
+  <div style="font-family:'Bungee',sans-serif; font-size:clamp(36px,7vw,80px); color:var(--blood); text-shadow:var(--red-glow); letter-spacing:4px; margin-bottom:8px;">SIGNAL LOST</div>
+  <div style="letter-spacing:6px; font-size:11px; opacity:0.6; margin-bottom:40px;">// CONNECTION TERMINATED //</div>
+  <div class="stats-grid">
+    <div class="stat-box">
+      <div class="stat-num" id="finalScore">0</div>
+      <div class="stat-label">SCORE</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="finalWave">1</div>
+      <div class="stat-label">WAVE REACHED</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="finalKills">0</div>
+      <div class="stat-label">KILLS</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="finalBest">0</div>
+      <div class="stat-label">BEST SCORE</div>
+    </div>
+  </div>
+  <button class="btn danger" onclick="startGame()">↺ REBOOT SIGNAL</button>
+  <button class="btn" onclick="goHome()" style="margin-top:8px">🛸 HOME</button>
+</div>
+
+<!-- Game Canvas -->
+<div id="gameContainer">
+  <canvas id="gameCanvas"></canvas>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-panel">
+    <div class="hud-label">SCORE</div>
+    <div class="hud-value" id="scoreDisplay">0</div>
+  </div>
+  <div class="hud-panel" style="text-align:center">
+    <div class="hud-label">WAVE</div>
+    <div class="hud-value" id="waveDisplay">1</div>
+  </div>
+  <div class="hud-panel" style="text-align:right">
+    <div class="hud-label">BEST</div>
+    <div class="hud-value" id="bestDisplay">0</div>
+  </div>
+</div>
+
+<div class="mr-badge">MAXIMUM REALITY // DEAD SIGNAL v1.0</div>
+
+<div id="healthBar">
+  <div class="health-label">VITALS</div>
+  <div class="health-track">
+    <div id="healthFill" style="width:100%"></div>
+  </div>
+</div>
+
+<div id="ammoDisplay">
+  <div class="ammo-label">AMMO</div>
+  <div class="ammo-value" id="ammoVal">30</div>
+</div>
+
+<div id="waveAlert"></div>
+<div id="reloadFlash">⟳ RELOADING...</div>
+
+<div class="controls-hint">
+  WASD — MOVE<br>
+  MOUSE — AIM<br>
+  CLICK — FIRE<br>
+  R — RELOAD
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Resize
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Game state
+let state = 'title';
+let score = 0, bestScore = 0, wave = 1, kills = 0;
+let player, bullets, zombies, particles, bloodSplats;
+let keys = {}, mouse = { x: 0, y: 0 };
+let ammo = 30, maxAmmo = 30, reloading = false, reloadTimer = 0;
+let health = 100;
+let waveTimer = 0, waveActive = false, zombiesToSpawn = 0, spawnTimer = 0;
+let gameLoop;
+let shootCooldown = 0;
+let muzzleFlash = 0;
+
+// Player
+function createPlayer() {
+  return {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    size: 24,
+    speed: 3.5,
+    angle: 0,
+    emoji: '🧑‍💻',
+    invincible: 0
+  };
+}
+
+// Zombie types
+const ZOMBIE_TYPES = [
+  { emoji: '🧟', speed: 1.2, hp: 2, score: 10, size: 22 },
+  { emoji: '🧟‍♀️', speed: 1.8, hp: 1, score: 15, size: 20 },
+  { emoji: '☠️', speed: 0.8, hp: 5, score: 30, size: 26 },
+  { emoji: '👾', speed: 2.5, hp: 1, score: 20, size: 18 },
+];
+
+function spawnZombie() {
+  const type = ZOMBIE_TYPES[Math.floor(Math.random() * Math.min(ZOMBIE_TYPES.length, 1 + Math.floor(wave / 2)))];
+  const side = Math.floor(Math.random() * 4);
+  let x, y;
+  const margin = 40;
+  if (side === 0) { x = Math.random() * canvas.width; y = -margin; }
+  else if (side === 1) { x = canvas.width + margin; y = Math.random() * canvas.height; }
+  else if (side === 2) { x = Math.random() * canvas.width; y = canvas.height + margin; }
+  else { x = -margin; y = Math.random() * canvas.height; }
+
+  return {
+    x, y,
+    size: type.size,
+    speed: type.speed + (wave * 0.08),
+    hp: type.hp + Math.floor(wave / 3),
+    maxHp: type.hp + Math.floor(wave / 3),
+    scoreVal: type.score,
+    emoji: type.emoji,
+    angle: 0,
+    flashTimer: 0,
+    wobble: Math.random() * Math.PI * 2
+  };
+}
+
+function spawnParticle(x, y, color, count = 6) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 4;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      decay: 0.03 + Math.random() * 0.04,
+      size: 2 + Math.random() * 4,
+      color
+    });
+  }
+}
+
+function spawnBloodSplat(x, y) {
+  bloodSplats.push({ x, y, size: 20 + Math.random() * 30, alpha: 0.6, decay: 0.003 });
+}
+
+function startGame() {
+  document.getElementById('titleScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  state = 'playing';
+  score = 0; wave = 1; kills = 0; health = 100;
+  ammo = maxAmmo; reloading = false;
+  player = createPlayer();
+  bullets = []; zombies = []; particles = []; bloodSplats = [];
+  startWave();
+  updateHUD();
+  if (gameLoop) cancelAnimationFrame(gameLoop);
+  loop();
+}
+
+function startWave() {
+  waveActive = true;
+  zombiesToSpawn = 5 + wave * 3;
+  spawnTimer = 0;
+  showWaveAlert(`WAVE ${wave}`);
+}
+
+function showWaveAlert(text) {
+  const el = document.getElementById('waveAlert');
+  el.textContent = text;
+  el.style.opacity = '1';
+  el.classList.add('glitch');
+  setTimeout(() => { el.classList.remove('glitch'); }, 300);
+  setTimeout(() => {
+    el.style.transition = 'opacity 1s';
+    el.style.opacity = '0';
+    setTimeout(() => { el.style.transition = ''; }, 1000);
+  }, 1500);
+}
+
+function updateHUD() {
+  document.getElementById('scoreDisplay').textContent = score;
+  document.getElementById('waveDisplay').textContent = wave;
+  document.getElementById('bestDisplay').textContent = bestScore;
+  document.getElementById('ammoVal').textContent = reloading ? '...' : ammo;
+  document.getElementById('healthFill').style.width = health + '%';
+}
+
+function gameOver() {
+  state = 'gameover';
+  if (score > bestScore) bestScore = score;
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('finalWave').textContent = wave;
+  document.getElementById('finalKills').textContent = kills;
+  document.getElementById('finalBest').textContent = bestScore;
+  document.getElementById('gameOverScreen').classList.remove('hidden');
+}
+
+function goHome() {
+  window.location.href = 'https://maximumreality.xyz';
+}
+
+// Input
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key.toLowerCase() === 'r' && !reloading && ammo < maxAmmo && state === 'playing') startReload();
+});
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener('mousedown', e => { if (e.button === 0 && state === 'playing') shoot(); });
+
+// Touch support
+let touchStart = null;
+window.addEventListener('touchstart', e => {
+  touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  mouse.x = e.touches[0].clientX;
+  mouse.y = e.touches[0].clientY;
+  if (state === 'playing') shoot();
+});
+window.addEventListener('touchmove', e => {
+  e.preventDefault();
+  mouse.x = e.touches[0].clientX;
+  mouse.y = e.touches[0].clientY;
+}, { passive: false });
+
+function shoot() {
+  if (reloading || shootCooldown > 0) return;
+  if (ammo <= 0) { startReload(); return; }
+  ammo--;
+  shootCooldown = 8;
+  muzzleFlash = 5;
+  const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  // Spread
+  const spread = 0.05;
+  for (let i = 0; i < 1; i++) {
+    const a = angle + (Math.random() - 0.5) * spread;
+    bullets.push({
+      x: player.x, y: player.y,
+      vx: Math.cos(a) * 14,
+      vy: Math.sin(a) * 14,
+      life: 1,
+      trail: []
+    });
+  }
+  spawnParticle(player.x, player.y, '#ffff00', 3);
+  updateHUD();
+}
+
+function startReload() {
+  if (reloading || ammo === maxAmmo) return;
+  reloading = true;
+  reloadTimer = 120; // 2 seconds at 60fps
+  document.getElementById('reloadFlash').style.opacity = '1';
+  updateHUD();
+}
+
+function finishReload() {
+  reloading = false;
+  ammo = maxAmmo;
+  document.getElementById('reloadFlash').style.opacity = '0';
+  updateHUD();
+}
+
+// Draw helpers
+function drawEmoji(emoji, x, y, size, angle = 0, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.font = `${size * 2}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, 0, 0);
+  ctx.restore();
+}
+
+// Main loop
+function loop() {
+  if (state !== 'playing') return;
+  update();
+  render();
+  gameLoop = requestAnimationFrame(loop);
+}
+
+function update() {
+  // Player movement
+  let dx = 0, dy = 0;
+  if (keys['w'] || keys['arrowup']) dy -= 1;
+  if (keys['s'] || keys['arrowdown']) dy += 1;
+  if (keys['a'] || keys['arrowleft']) dx -= 1;
+  if (keys['d'] || keys['arrowright']) dx += 1;
+  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  player.x = Math.max(20, Math.min(canvas.width - 20, player.x + dx * player.speed));
+  player.y = Math.max(20, Math.min(canvas.height - 20, player.y + dy * player.speed));
+  player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  if (player.invincible > 0) player.invincible--;
+
+  // Shoot cooldown
+  if (shootCooldown > 0) shootCooldown--;
+  if (muzzleFlash > 0) muzzleFlash--;
+
+  // Reload
+  if (reloading) {
+    reloadTimer--;
+    if (reloadTimer <= 0) finishReload();
+  }
+
+  // Spawn zombies
+  if (waveActive && zombiesToSpawn > 0) {
+    spawnTimer--;
+    if (spawnTimer <= 0) {
+      zombies.push(spawnZombie());
+      zombiesToSpawn--;
+      spawnTimer = Math.max(10, 40 - wave * 2);
+    }
+  }
+
+  // Check wave complete
+  if (waveActive && zombiesToSpawn === 0 && zombies.length === 0) {
+    waveActive = false;
+    wave++;
+    waveTimer = 180;
+  }
+  if (!waveActive && waveTimer > 0) {
+    waveTimer--;
+    if (waveTimer === 0) startWave();
+  }
+
+  // Update bullets
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.trail.push({ x: b.x, y: b.y });
+    if (b.trail.length > 6) b.trail.shift();
+    b.x += b.vx; b.y += b.vy;
+    b.life -= 0.015;
+    if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height || b.life <= 0) {
+      bullets.splice(i, 1);
+    }
+  }
+
+  // Update zombies
+  for (let i = zombies.length - 1; i >= 0; i--) {
+    const z = zombies[i];
+    z.wobble += 0.1;
+    const angle = Math.atan2(player.y - z.y, player.x - z.x);
+    z.angle = angle;
+    z.x += Math.cos(angle) * z.speed;
+    z.y += Math.sin(angle) * z.speed;
+    if (z.flashTimer > 0) z.flashTimer--;
+
+    // Bullet hit
+    for (let j = bullets.length - 1; j >= 0; j--) {
+      const b = bullets[j];
+      const dist = Math.hypot(b.x - z.x, b.y - z.y);
+      if (dist < z.size + 8) {
+        z.hp--;
+        z.flashTimer = 8;
+        spawnParticle(z.x, z.y, '#ff1a1a', 8);
+        bullets.splice(j, 1);
+        if (z.hp <= 0) {
+          score += z.scoreVal;
+          kills++;
+          spawnBloodSplat(z.x, z.y);
+          spawnParticle(z.x, z.y, '#ff1a1a', 20);
+          zombies.splice(i, 1);
+          updateHUD();
+        }
+        break;
+      }
+    }
+
+    // Player hit
+    if (player.invincible === 0) {
+      const dist = Math.hypot(player.x - z.x, player.y - z.y);
+      if (dist < player.size + z.size - 8) {
+        health -= 10;
+        player.invincible = 60;
+        spawnParticle(player.x, player.y, '#ff6600', 10);
+        if (health <= 0) { health = 0; updateHUD(); gameOver(); return; }
+        updateHUD();
+      }
+    }
+  }
+
+  // Update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vx *= 0.9; p.vy *= 0.9;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // Decay blood
+  for (let i = bloodSplats.length - 1; i >= 0; i--) {
+    bloodSplats[i].alpha -= bloodSplats[i].decay;
+    if (bloodSplats[i].alpha <= 0) bloodSplats.splice(i, 1);
+  }
+}
+
+function render() {
+  // Background
+  ctx.fillStyle = '#050a05';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(57,255,20,0.04)';
+  ctx.lineWidth = 1;
+  const gridSize = 60;
+  for (let x = 0; x < canvas.width; x += gridSize) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y < canvas.height; y += gridSize) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  }
+
+  // Blood splats
+  bloodSplats.forEach(s => {
+    ctx.save();
+    ctx.globalAlpha = s.alpha;
+    ctx.font = `${s.size}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💀', s.x, s.y);
+    ctx.restore();
+  });
+
+  // Bullet trails
+  bullets.forEach(b => {
+    b.trail.forEach((t, i) => {
+      ctx.save();
+      ctx.globalAlpha = (i / b.trail.length) * 0.6;
+      ctx.fillStyle = '#ffff88';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur = 6;
+      const r = 3 * (i / b.trail.length);
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+    // Bullet head
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = '#ffff00';
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // Particles
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // Zombies
+  zombies.forEach(z => {
+    ctx.save();
+    if (z.flashTimer > 0 && z.flashTimer % 2 === 0) {
+      ctx.filter = 'brightness(3) saturate(0)';
+    }
+    // HP bar
+    if (z.maxHp > 1) {
+      const bw = 40;
+      const bx = z.x - bw / 2;
+      const by = z.y - z.size - 14;
+      ctx.fillStyle = '#330000';
+      ctx.fillRect(bx, by, bw, 5);
+      ctx.fillStyle = '#ff1a1a';
+      ctx.fillRect(bx, by, bw * (z.hp / z.maxHp), 5);
+    }
+    drawEmoji(z.emoji, z.x, z.y + Math.sin(z.wobble) * 2, z.size);
+    ctx.restore();
+  });
+
+  // Player
+  if (player) {
+    ctx.save();
+    if (player.invincible > 0 && Math.floor(player.invincible / 4) % 2 === 0) {
+      ctx.globalAlpha = 0.4;
+    }
+    // Aim line
+    ctx.strokeStyle = 'rgba(57,255,20,0.15)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 8]);
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y);
+    ctx.lineTo(
+      player.x + Math.cos(player.angle) * 120,
+      player.y + Math.sin(player.angle) * 120
+    );
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Muzzle flash
+    if (muzzleFlash > 0) {
+      ctx.fillStyle = 'rgba(255,255,100,0.6)';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur = 30;
+      ctx.beginPath();
+      ctx.arc(
+        player.x + Math.cos(player.angle) * 28,
+        player.y + Math.sin(player.angle) * 28,
+        8, 0, Math.PI * 2
+      );
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    drawEmoji('🧑‍💻', player.x, player.y, player.size);
+    ctx.restore();
+  }
+
+  // Crosshair
+  const cx = mouse.x, cy = mouse.y;
+  ctx.strokeStyle = 'rgba(57,255,20,0.8)';
+  ctx.lineWidth = 1.5;
+  const cs = 12;
+  ctx.beginPath();
+  ctx.moveTo(cx - cs, cy); ctx.lineTo(cx - 4, cy);
+  ctx.moveTo(cx + 4, cy); ctx.lineTo(cx + cs, cy);
+  ctx.moveTo(cx, cy - cs); ctx.lineTo(cx, cy - 4);
+  ctx.moveTo(cx, cy + 4); ctx.lineTo(cx, cy + cs);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.stroke();
+}
+</script>
+</body>
+</html>
