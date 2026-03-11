@@ -407,17 +407,18 @@
 </div>
 
 <script>
- // 1. SPRITE DATA
+ // 1. SPRITE CONFIG
 const assets = {
   player: new Image(),
   zombie: new Image(),
   blood: new Image()
 };
+
+// Setting sources directly - No waiting
 assets.player.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABHklEQVRYR+2V0W3CMBRF780EbMAETMAETMAETMAETMAE7ALsAuwC7ALsAnSCTpA9SSTfE6UpUioSOfYvP8UnreM4pnd7uLp5706vAnAnfAH46M7fC9+M8V7U+YIu4D6Gz8D9hK+D8F/DAnALfAFuW3yZAm6Y7mH+Wfgt/C68v9/XAt9LzGfgfMIPf59w28IX7PcCvNfA78LvUvgXyP6LAV8D50rML+A8ws9S+LcsAPvOEnAtMZeAnX8XfhmEfy8LAK1fEnMN6PeX8Ntg/N9lAcCrtS8xd8An4L6E3+XwAasAoH9fE3ML6PfX8LtE/G9ZAMCH620Se0fMPv/eAr8Lxz8sALAsH0niXon97mH6FvhdyP6pAKD1Kwm6TzDdzrO79y7D8o/8B7h9pM6i9R0mAAAAAElFTkSuQmCC";
 assets.zombie.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABDElEQVRYR+2V0Q3CMAxE38wEbMAETMAETMAETMAETMAE7ALsAuwC7ALsAnSCTsh0SST8pUoqSgUiY/9yj09S7/vevXvD3Uf39vUuAPfCV4C/7vzzwpfReB51P6ELeIrhK/AyhO8R/lVYAG6BT8D9GF/mC9xtmO9l/ln4PfwpfLjfN8D3GPMeOJPwg787uN3CF/o9A+9S+EP4UwrfA9l/Y8DXyLmYeQI+h/CjFP4tC8C+UwNupcyZInD+VfhlEP6zLABofUnMLaDfX8Jvg/F/lwUArzZ9idkBPhfXWvhbDB+wCgD6dzQxd4B+fwm/S8T/lQUAfLixTeLuE7OvP7fA78LxDwsALMshidx7YrfzmH6Wwr9A9u8KAFq/kqD7FNPtNLv3bsPyf/YDe0N6l6q+EAgAAAAASUVORK5CYII=";
 assets.blood.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAbUlEQVRYR+2V0QnAIAxF78wEbMAETMAETMAETMAETMAE7ALsAuwC7ALsAnSCTkhySST8pUoqSgUi4/9yj09S7/vevXvD3Uf39vUuAPfCPwt/T0y3U/iL8K+EBWCvN09Mt79I7D0xfMAqAOjf09v7FPA99QE9gDqKq0oUogAAAABJRU5ErkJggg==";
 
-// 2. CANVAS SETUP
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 let w, h;
@@ -425,43 +426,38 @@ let w, h;
 function resize() {
   w = canvas.width = window.innerWidth;
   h = canvas.height = window.innerHeight;
-  if (player) { player.x = w/2; player.y = h/2; }
 }
+resize();
 window.addEventListener('resize', resize);
 
-// 3. GAME STATE
+// 2. STATE
 let state = 'title', score = 0, wave = 1, health = 100;
 let player = { x: 0, y: 0, size: 24, angle: 0 };
 let bullets = [], zombies = [], bloodSplats = [], mouse = { x: 0, y: 0 };
-let ammo = 30, reloading = false, reloadTimer = 0, waveActive = false, zombiesToSpawn = 0, spawnTimer = 0;
+let ammo = 30, reloading = false, reloadTimer = 0, spawnTimer = 0;
 
-// 4. INPUT (Mobile Optimized)
-function getPos(e) {
+// 3. INPUT
+function updateMouse(e) {
   const t = e.touches ? e.touches[0] : e;
-  return { x: t.clientX, y: t.clientY };
+  mouse.x = t.clientX;
+  mouse.y = t.clientY;
 }
-
-window.addEventListener('touchstart', e => { 
-  const p = getPos(e); mouse.x = p.x; mouse.y = p.y;
-  if (state === 'playing') shoot();
-}, {passive: false});
-
-window.addEventListener('touchmove', e => {
-  e.preventDefault();
-  const p = getPos(e); mouse.x = p.x; mouse.y = p.y;
-}, {passive: false});
-
-window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener('touchstart', e => { updateMouse(e); if (state === 'playing') shoot(); });
+window.addEventListener('touchmove', e => { e.preventDefault(); updateMouse(e); }, {passive: false});
+window.addEventListener('mousemove', updateMouse);
 window.addEventListener('mousedown', () => { if (state === 'playing') shoot(); });
 
 function startGame() {
-  resize();
+  resize(); // Recalculate screen size
+  player.x = w / 2;
+  player.y = h / 2;
+  state = 'playing';
+  health = 100; score = 0; ammo = 30;
+  zombies = []; bullets = []; bloodSplats = [];
   document.getElementById('titleScreen').classList.add('hidden');
   document.getElementById('gameOverScreen').classList.add('hidden');
-  state = 'playing'; health = 100; score = 0; wave = 1;
-  zombies = []; bullets = []; bloodSplats = [];
-  waveActive = true; zombiesToSpawn = 10;
-  requestAnimationFrame(loop);
+  updateHUD();
+  loop();
 }
 
 function shoot() {
@@ -481,40 +477,44 @@ function updateHUD() {
 function loop() {
   if (state !== 'playing') return;
   
-  // Player Angle
   player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
 
-  // Spawn Zombies
-  if (zombiesToSpawn > 0 && --spawnTimer <= 0) {
-    zombies.push({ x: Math.random() * w, y: -20, hp: 2 });
-    zombiesToSpawn--; spawnTimer = 60;
+  // Spawn from 4 sides
+  if (--spawnTimer <= 0) {
+    let zx, zy;
+    if (Math.random() > 0.5) {
+      zx = Math.random() > 0.5 ? -30 : w + 30;
+      zy = Math.random() * h;
+    } else {
+      zx = Math.random() * w;
+      zy = Math.random() > 0.5 ? -30 : h + 30;
+    }
+    zombies.push({ x: zx, y: zy, hp: 2 });
+    spawnTimer = Math.max(20, 60 - (wave * 2));
   }
 
-  // Update Bullets
   bullets.forEach((b, i) => {
     b.x += b.vx; b.y += b.vy;
     if (b.x < 0 || b.x > w || b.y < 0 || b.y > h) bullets.splice(i, 1);
   });
 
-  // Update Zombies
   zombies.forEach((z, i) => {
     const a = Math.atan2(player.y - z.y, player.x - z.x);
     z.x += Math.cos(a) * 1.5; z.y += Math.sin(a) * 1.5;
     z.angle = a;
 
     bullets.forEach((b, j) => {
-      if (Math.hypot(b.x - z.x, b.y - z.y) < 20) {
+      if (Math.hypot(b.x - z.x, b.y - z.y) < 25) {
         z.hp--; bullets.splice(j, 1);
         if (z.hp <= 0) { 
-          score += 10; 
-          bloodSplats.push({x: z.x, y: z.y, a: 1});
+          score += 10; bloodSplats.push({x: z.x, y: z.y, a: 1});
           zombies.splice(i, 1); updateHUD(); 
         }
       }
     });
 
-    if (Math.hypot(player.x - z.x, player.y - z.y) < 20) {
-      health -= 0.2; updateHUD();
+    if (Math.hypot(player.x - z.x, player.y - z.y) < 25) {
+      health -= 0.3; updateHUD();
       if (health <= 0) { state = 'gameover'; document.getElementById('gameOverScreen').classList.remove('hidden'); }
     }
   });
@@ -531,31 +531,33 @@ function render() {
   // Blood
   bloodSplats.forEach(s => {
     ctx.globalAlpha = s.a;
-    ctx.drawImage(assets.blood, s.x - 15, s.y - 15, 30, 30);
+    if (assets.blood.complete) ctx.drawImage(assets.blood, s.x - 15, s.y - 15, 30, 30);
+    else { ctx.fillStyle = 'red'; ctx.fillRect(s.x-5, s.y-5, 10, 10); }
   });
   ctx.globalAlpha = 1;
 
   // Bullets
   ctx.fillStyle = '#fff';
-  bullets.forEach(b => ctx.fillRect(b.x, b.y, 4, 4));
+  bullets.forEach(b => ctx.fillRect(b.x - 2, b.y - 2, 4, 4));
 
   // Zombies
   zombies.forEach(z => {
     ctx.save(); ctx.translate(z.x, z.y); ctx.rotate(z.angle);
-    ctx.drawImage(assets.zombie, -16, -16, 32, 32);
+    if (assets.zombie.complete) ctx.drawImage(assets.zombie, -16, -16, 32, 32);
+    else { ctx.fillStyle = '#39ff14'; ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(10,10); ctx.lineTo(-10,10); ctx.fill(); }
     ctx.restore();
   });
 
   // Player
   ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle);
-  ctx.drawImage(assets.player, -16, -16, 32, 32);
+  if (assets.player.complete) ctx.drawImage(assets.player, -20, -20, 40, 40);
+  else { ctx.strokeStyle = '#00f5ff'; ctx.lineWidth = 3; ctx.strokeRect(-15, -15, 30, 30); }
   ctx.restore();
 
-  // Sights
-  ctx.strokeStyle = '#39ff14';
+  // Crosshair
+  ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2;
   ctx.strokeRect(mouse.x - 10, mouse.y - 10, 20, 20);
 }
-
 
 </script>
 </body>
