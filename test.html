@@ -407,7 +407,7 @@
 </div>
 
 <script>
- // 1. ASSET INITIALIZATION
+ // 1. ASSETS
 const assets = {
   player: new Image(),
   zombie: new Image(),
@@ -422,120 +422,188 @@ const ctx = canvas.getContext('2d');
 let w, h;
 
 function setup() {
-    w = canvas.width = window.innerWidth;
-    h = canvas.height = window.innerHeight;
+  w = canvas.width = window.innerWidth;
+  h = canvas.height = window.innerHeight;
 }
 window.addEventListener('resize', setup);
 setup();
 
 let state = 'title', score = 0, health = 100, ammo = 30;
-let player = { x: 0, y: 0, angle: 0 };
+let player = { x: window.innerWidth/2, y: window.innerHeight/2, angle: 0 };
 let bullets = [], zombies = [], blood = [], mouse = { x: 0, y: 0 };
 let spawnTimer = 0;
 
-// 2. INPUT
+// 2. INPUT (Optimized for iPhone)
 function handleMove(e) {
-    const t = e.touches ? e.touches[0] : e;
-    mouse.x = t.clientX; mouse.y = t.clientY;
+  const t = e.touches ? e.touches[0] : e;
+  mouse.x = t.clientX;
+  mouse.y = t.clientY;
 }
-window.addEventListener('touchstart', (e) => { handleMove(e); if(state==='playing') shoot(); });
-window.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); }, {passive: false});
+window.addEventListener('touchstart', (e) => { 
+  handleMove(e); 
+  if(state==='playing') shoot(); 
+}, {passive: false});
+window.addEventListener('touchmove', (e) => { 
+  e.preventDefault(); 
+  handleMove(e); 
+}, {passive: false});
 window.addEventListener('mousemove', handleMove);
 window.addEventListener('mousedown', () => { if(state==='playing') shoot(); });
 
 function startGame() {
-    setup();
-    player.x = w / 2; player.y = h / 2;
-    state = 'playing'; health = 100; score = 0; ammo = 30;
-    zombies = []; bullets = []; blood = [];
-    document.getElementById('titleScreen').classList.add('hidden');
-    document.getElementById('gameOverScreen').classList.add('hidden');
-    updateHUD();
-    requestAnimationFrame(loop);
+  setup();
+  // Double-force center coordinates
+  player.x = w / 2;
+  player.y = h / 2;
+  
+  state = 'playing';
+  health = 100;
+  score = 0;
+  ammo = 30;
+  zombies = [];
+  bullets = [];
+  blood = [];
+  
+  document.getElementById('titleScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  updateHUD();
+  
+  // High-frequency loop
+  requestAnimationFrame(loop);
 }
 
 function shoot() {
-    if (ammo <= 0) return;
-    const a = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-    bullets.push({ x: player.x, y: player.y, vx: Math.cos(a) * 15, vy: Math.sin(a) * 15 });
-    ammo--; updateHUD();
+  if (ammo <= 0) return;
+  const a = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  bullets.push({ x: player.x, y: player.y, vx: Math.cos(a) * 15, vy: Math.sin(a) * 15 });
+  ammo--;
+  updateHUD();
 }
 
 function updateHUD() {
-    document.getElementById('scoreDisplay').textContent = score;
-    document.getElementById('ammoVal').textContent = ammo;
-    document.getElementById('healthFill').style.width = health + '%';
+  document.getElementById('scoreDisplay').textContent = score;
+  document.getElementById('ammoVal').textContent = ammo;
+  document.getElementById('healthFill').style.width = health + '%';
 }
 
 function loop() {
-    if (state !== 'playing') return;
+  if (state !== 'playing') return;
 
-    player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  // Move player logic (stationary in center, but rotating)
+  player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
 
-    if (--spawnTimer <= 0) {
-        zombies.push({ x: Math.random() > 0.5 ? -30 : w + 30, y: Math.random() * h, hp: 2 });
-        spawnTimer = 50;
+  // Spawn Zombies
+  if (--spawnTimer <= 0) {
+    zombies.push({ 
+      x: Math.random() > 0.5 ? -30 : w + 30, 
+      y: Math.random() * h, 
+      hp: 1 
+    });
+    spawnTimer = 60;
+  }
+
+  // Update Bullets
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    let b = bullets[i];
+    b.x += b.vx; b.y += b.vy;
+    if (b.x < 0 || b.x > w || b.y < 0 || b.y > h) bullets.splice(i, 1);
+  }
+
+  // Update Zombies
+  for (let i = zombies.length - 1; i >= 0; i--) {
+    let z = zombies[i];
+    const a = Math.atan2(player.y - z.y, player.x - z.x);
+    z.x += Math.cos(a) * 2;
+    z.y += Math.sin(a) * 2;
+
+    // Bullet Hit
+    for (let j = bullets.length - 1; j >= 0; j--) {
+      let b = bullets[j];
+      if (Math.hypot(b.x - z.x, b.y - z.y) < 25) {
+        score += 10;
+        blood.push({x: z.x, y: z.y, a: 1});
+        zombies.splice(i, 1);
+        bullets.splice(j, 1);
+        updateHUD();
+        break;
+      }
     }
 
-    bullets.forEach((b, i) => {
-        b.x += b.vx; b.y += b.vy;
-        if (b.x < -50 || b.x > w + 50 || b.y < -50 || b.y > h + 50) bullets.splice(i, 1);
-    });
+    // Player Hit
+    if (z && Math.hypot(player.x - z.x, player.y - z.y) < 25) {
+      health -= 2;
+      updateHUD();
+      if (health <= 0) {
+        state = 'gameover';
+        document.getElementById('gameOverScreen').classList.remove('hidden');
+      }
+    }
+  }
 
-    zombies.forEach((z, i) => {
-        const a = Math.atan2(player.y - z.y, player.x - z.x);
-        z.x += Math.cos(a) * 1.8; z.y += Math.sin(a) * 1.8;
-        z.angle = a;
+  // Fade blood
+  for (let i = blood.length - 1; i >= 0; i--) {
+    blood[i].a -= 0.02;
+    if (blood[i].a <= 0) blood.splice(i, 1);
+  }
 
-        bullets.forEach((b, j) => {
-            if (Math.hypot(b.x - z.x, b.y - z.y) < 25) {
-                z.hp--; bullets.splice(j, j);
-                if (z.hp <= 0) {
-                    score += 10; blood.push({x: z.x, y: z.y, a: 1});
-                    zombies.splice(i, 1); updateHUD();
-                }
-            }
-        });
-
-        if (Math.hypot(player.x - z.x, player.y - z.y) < 25) {
-            health -= 0.5; updateHUD();
-            if (health <= 0) { state = 'gameover'; document.getElementById('gameOverScreen').classList.remove('hidden'); }
-        }
-    });
-
-    blood.forEach((s, i) => { s.a -= 0.02; if (s.a <= 0) blood.splice(i, 1); });
-    render();
-    requestAnimationFrame(loop);
+  render();
+  requestAnimationFrame(loop);
 }
 
 function render() {
-    ctx.fillStyle = '#050a05'; ctx.fillRect(0, 0, w, h);
+  // Clear the stage
+  ctx.fillStyle = '#050a05';
+  ctx.fillRect(0, 0, w, h);
 
-    // Blood
-    blood.forEach(s => {
-        ctx.globalAlpha = s.a;
-        if (assets.blood.complete) ctx.drawImage(assets.blood, s.x-15, s.y-15, 30, 30);
-        else { ctx.fillStyle = 'red'; ctx.fillRect(s.x-5, s.y-5, 10, 10); }
-    });
-    ctx.globalAlpha = 1;
+  // Draw Blood
+  blood.forEach(s => {
+    ctx.globalAlpha = s.a;
+    if (assets.blood.complete && assets.blood.naturalWidth !== 0) {
+      ctx.drawImage(assets.blood, s.x-15, s.y-15, 30, 30);
+    } else {
+      ctx.fillStyle = 'red';
+      ctx.fillRect(s.x-5, s.y-5, 10, 10);
+    }
+  });
+  ctx.globalAlpha = 1;
 
-    // Zombies
-    zombies.forEach(z => {
-        ctx.save(); ctx.translate(z.x, z.y); ctx.rotate(z.angle);
-        if (assets.zombie.complete) ctx.drawImage(assets.zombie, -16, -16, 32, 32);
-        else { ctx.fillStyle = '#39ff14'; ctx.fillRect(-12, -12, 24, 24); }
-        ctx.restore();
-    });
+  // Draw Player (Blue Glow)
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  ctx.rotate(player.angle);
+  if (assets.player.complete && assets.player.naturalWidth !== 0) {
+    ctx.drawImage(assets.player, -20, -20, 40, 40);
+  } else {
+    // FALLBACK
+    ctx.fillStyle = '#00f5ff';
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.strokeRect(-5, -5, 10, 10);
+  }
+  ctx.restore();
 
-    // Player
-    ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle);
-    if (assets.player.complete) ctx.drawImage(assets.player, -20, -20, 40, 40);
-    else { ctx.fillStyle = '#00f5ff'; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill(); }
-    ctx.restore();
+  // Draw Zombies
+  zombies.forEach(z => {
+    if (assets.zombie.complete && assets.zombie.naturalWidth !== 0) {
+      ctx.save();
+      ctx.translate(z.x, z.y);
+      ctx.rotate(Math.atan2(player.y - z.y, player.x - z.x));
+      ctx.drawImage(assets.zombie, -16, -16, 32, 32);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#39ff14';
+      ctx.fillRect(z.x-12, z.y-12, 24, 24);
+    }
+  });
 
-    // Bullets & Sights
-    ctx.fillStyle = '#fff'; bullets.forEach(b => ctx.fillRect(b.x-2, b.y-2, 4, 4));
-    ctx.strokeStyle = '#39ff14'; ctx.strokeRect(mouse.x-15, mouse.y-15, 30, 30);
+  // Draw Bullets
+  ctx.fillStyle = '#fff';
+  bullets.forEach(b => ctx.fillRect(b.x-2, b.y-2, 4, 4));
+
+  // Draw Sights
+  ctx.strokeStyle = '#39ff14';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(mouse.x-15, mouse.y-15, 30, 30);
 }
 
 </script>
