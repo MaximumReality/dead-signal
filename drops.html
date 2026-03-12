@@ -124,6 +124,15 @@
   .pu-snack { color:#ff8800; border-color:#ff880088; }
 
   .controls-hint { position:fixed; bottom:60px; left:20px; z-index:100; pointer-events:none; opacity:0.4; font-size:10px; line-height:1.8; }
+
+  /* VIRTUAL JOYSTICK */
+  #joystickZone { position:fixed; bottom:0; left:0; width:50%; height:45%; z-index:200; touch-action:none; }
+  #joystickBase { position:absolute; width:110px; height:110px; border-radius:50%; border:2px solid rgba(57,255,20,0.3); background:rgba(0,255,20,0.04); box-shadow:0 0 20px rgba(57,255,20,0.15); display:none; transform:translate(-50%,-50%); pointer-events:none; }
+  #joystickKnob { position:absolute; width:46px; height:46px; border-radius:50%; background:rgba(57,255,20,0.25); border:2px solid rgba(57,255,20,0.7); box-shadow:0 0 14px #39ff14; transform:translate(-50%,-50%); pointer-events:none; }
+  #shootZone { position:fixed; bottom:0; right:0; width:50%; height:45%; z-index:200; touch-action:none; display:flex; align-items:flex-end; justify-content:flex-end; padding:24px; }
+  #shootBtn { width:80px; height:80px; border-radius:50%; border:2px solid rgba(255,26,26,0.5); background:rgba(255,26,26,0.08); box-shadow:0 0 20px rgba(255,26,26,0.2); display:flex; align-items:center; justify-content:center; font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:rgba(255,26,26,0.7); pointer-events:none; }
+  #reloadBtn { position:fixed; bottom:110px; right:24px; z-index:200; width:54px; height:54px; border-radius:50%; border:2px solid rgba(0,245,255,0.4); background:rgba(0,245,255,0.06); box-shadow:0 0 12px rgba(0,245,255,0.15); display:none; align-items:center; justify-content:center; font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px; color:rgba(0,245,255,0.6); touch-action:none; }
+  @media (hover:none) and (pointer:coarse) { .controls-hint { display:none; } #reloadBtn { display:flex; } }
   #reloadFlash { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); font-family:'Orbitron',monospace; font-size:18px; letter-spacing:4px; color:var(--cyan); text-shadow:var(--cyan-glow); z-index:200; pointer-events:none; opacity:0; transition:opacity 0.1s; }
   .mr-badge { position:fixed; top:12px; left:50%; transform:translateX(-50%); font-size:9px; letter-spacing:4px; opacity:0.3; z-index:100; pointer-events:none; }
 
@@ -137,6 +146,7 @@
   .zombie-preview img:nth-child(4){animation-delay:0.6s}
   .zombie-preview img:nth-child(5){animation-delay:0.8s}
   @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
     #classicLink {
     position: fixed;
     top: 20px;
@@ -164,12 +174,12 @@
 </style>
 </head>
 <body>
-
-<audio id="bgMusic" src="requiem-of-the-undead.mp3" loop></audio>
-<audio id="shotSound" src="shot.mp3"></audio>
 <a href="index.html" id="classicLink">
   ⬅ TERMINATE DROPS // RETURN TO CLASSIC
 </a>
+
+<audio id="bgMusic" src="requiem-of-the-undead.mp3" loop></audio>
+<audio id="shotSound" src="shot.mp3"></audio>
 
 <!-- Signal Buffer overlay (purple tint when active) -->
 <div id="signalBufferOverlay"></div>
@@ -228,6 +238,15 @@
 <div id="waveAlert"></div>
 <div id="reloadFlash">⟳ RELOADING...</div>
 <div class="controls-hint">WASD — MOVE<br>MOUSE — AIM<br>CLICK — FIRE<br>R — RELOAD</div>
+
+<!-- MOBILE CONTROLS -->
+<div id="joystickZone">
+  <div id="joystickBase"><div id="joystickKnob"></div></div>
+</div>
+<div id="shootZone">
+  <div id="shootBtn">FIRE</div>
+</div>
+<div id="reloadBtn">↺<br>RELOAD</div>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
@@ -456,8 +475,81 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => keys[e.key.toLowerCase()]=false);
 window.addEventListener('mousemove', e => { mouse.x=e.clientX; mouse.y=e.clientY; });
 window.addEventListener('mousedown', e => { if(e.button===0&&state==='playing') shoot(); });
-window.addEventListener('touchstart', e => { mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; if(state==='playing') shoot(); });
-window.addEventListener('touchmove', e => { e.preventDefault(); mouse.x=e.touches[0].clientX; mouse.y=e.touches[0].clientY; }, {passive:false});
+
+// ==================== VIRTUAL JOYSTICK ====================
+const joystickZone  = document.getElementById('joystickZone');
+const joystickBase  = document.getElementById('joystickBase');
+const joystickKnob  = document.getElementById('joystickKnob');
+const shootZone     = document.getElementById('shootZone');
+const reloadBtnEl   = document.getElementById('reloadBtn');
+
+let joyActive = false, joyId = null;
+let joyOrigin = {x:0, y:0};
+let joyVec    = {x:0, y:0};   // normalized -1..1
+const JOY_RADIUS = 50;
+
+// Joystick — left half of screen
+joystickZone.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  joyId = t.identifier;
+  joyOrigin = { x: t.clientX, y: t.clientY };
+  joyActive = true;
+  joystickBase.style.left = t.clientX + 'px';
+  joystickBase.style.top  = t.clientY + 'px';
+  joystickBase.style.display = 'block';
+  joystickKnob.style.left = '50%';
+  joystickKnob.style.top  = '50%';
+}, {passive:false});
+
+joystickZone.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier !== joyId) continue;
+    const dx = t.clientX - joyOrigin.x;
+    const dy = t.clientY - joyOrigin.y;
+    const dist = Math.min(Math.hypot(dx, dy), JOY_RADIUS);
+    const angle = Math.atan2(dy, dx);
+    const kx = Math.cos(angle) * dist;
+    const ky = Math.sin(angle) * dist;
+    joystickKnob.style.left = (55 + kx) + 'px';
+    joystickKnob.style.top  = (55 + ky) + 'px';
+    joyVec.x = kx / JOY_RADIUS;
+    joyVec.y = ky / JOY_RADIUS;
+  }
+}, {passive:false});
+
+function endJoy(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) {
+      joyActive = false; joyVec.x = 0; joyVec.y = 0;
+      joystickBase.style.display = 'none';
+    }
+  }
+}
+joystickZone.addEventListener('touchend', endJoy, {passive:false});
+joystickZone.addEventListener('touchcancel', endJoy, {passive:false});
+
+// Shoot zone — right half: touchstart shoots, touchmove aims
+shootZone.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  // Aim toward touch on right side
+  mouse.x = t.clientX; mouse.y = t.clientY;
+  if (state === 'playing') shoot();
+}, {passive:false});
+
+shootZone.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  mouse.x = t.clientX; mouse.y = t.clientY;
+}, {passive:false});
+
+// Reload button
+reloadBtnEl.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (state === 'playing' && !reloading && !snackActive && ammo < maxAmmo) startReload();
+}, {passive:false});
 
 // ==================== SHOOT ====================
 function shoot() {
@@ -520,13 +612,15 @@ function loop() {
 
 // ==================== UPDATE ====================
 function update() {
-  // Player movement — unaffected by timeScale (player stays responsive)
-  let dx=0,dy=0;
-  if(keys['w']||keys['arrowup']) dy-=1;
-  if(keys['s']||keys['arrowdown']) dy+=1;
-  if(keys['a']||keys['arrowleft']) dx-=1;
-  if(keys['d']||keys['arrowright']) dx+=1;
-  if(dx&&dy){dx*=0.707;dy*=0.707;}
+  // Player movement — keyboard OR joystick
+  let dx = 0, dy = 0;
+  if (keys['w']||keys['arrowup'])    dy -= 1;
+  if (keys['s']||keys['arrowdown'])  dy += 1;
+  if (keys['a']||keys['arrowleft'])  dx -= 1;
+  if (keys['d']||keys['arrowright']) dx += 1;
+  // Joystick overrides keyboard if active
+  if (joyActive) { dx = joyVec.x; dy = joyVec.y; }
+  if (!joyActive && dx && dy) { dx *= 0.707; dy *= 0.707; }
   player.x=Math.max(30,Math.min(canvas.width-30,player.x+dx*player.speed));
   player.y=Math.max(30,Math.min(canvas.height-30,player.y+dy*player.speed));
   player.angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
